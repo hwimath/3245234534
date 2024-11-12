@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>휘매쓰연산챌린지</title>
+    <style>
+        /* 스타일은 이전과 동일합니다 */
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f0f0f0;
+        }
+        #game-container {
+            width: 600px;
+            margin: 50px auto;
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px #ccc;
+        }
+        #question {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        #options button {
+            font-size: 18px;
+            padding: 10px 20px;
+            margin: 5px;
+            width: 45%;
+        }
+        #energy-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #ddd;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        #energy {
+            width: 100%;
+            height: 100%;
+            background-color: #76c7c0;
+        }
+        #score, #chances, #total-time {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+        #message {
+            font-size: 20px;
+            color: red;
+            margin-top: 20px;
+        }
+        #start-screen, #game-screen, #end-screen {
+            display: none;
+        }
+        #start-screen.active, #game-screen.active, #end-screen.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="start-screen" class="active">
+        <h1>휘매쓰연산챌린지</h1>
+        <p>난이도를 선택하세요:</p>
+        <button onclick="startGame('best')">최고</button>
+        <button onclick="startGame('high')">상</button>
+        <button onclick="startGame('medium')">중</button>
+        <button onclick="startGame('low')">하</button>
+    </div>
+
+    <div id="game-screen">
+        <div id="energy-bar">
+            <div id="energy"></div>
+        </div>
+        <div id="question"></div>
+        <div id="options"></div>
+        <div id="score">점수: 0</div>
+        <div id="chances">남은 기회: 3</div>
+        <div id="total-time">총 게임 시간: 0초</div>
+    </div>
+
+    <div id="end-screen">
+        <h2>게임 종료!</h2>
+        <p id="final-score"></p>
+        <button onclick="location.reload()">다시 시작</button>
+    </div>
+</div>
+
+<script>
+    let timeLimits = {
+        'best': 20,
+        'high': 30,
+        'medium': 40,
+        'low': Infinity
+    };
+    let points = {
+        'best': 20,
+        'high': 15,
+        'medium': 13,
+        'low': 10
+    };
+    let difficulty;
+    let timeLimit;
+    let score = 0;
+    let chances = 3;
+    let totalTime = 0;
+    let energyDecreaseInterval;
+    let energyWidth = 100;
+    let questionTimeIncrease = 1.01;
+    let correctAnswer;
+    let gameActive = false;
+    let currentQuestionIndex = 0;
+
+    // 50개의 다양한 문제를 미리 정의합니다. 모든 답은 자연수입니다.
+    const questions = [
+        { question: '다음 수의 평균을 구하세요: 10, 20, 30', answer: 20 },
+        { question: '다음 수의 평균을 구하세요: 5, 15, 25', answer: 15 },
+        { question: '다음 수의 평균을 구하세요: 12, 24, 36', answer: 24 },
+        { question: '다음 수의 평균을 구하세요: 8, 16, 24', answer: 16 },
+        { question: '다음 수의 평균을 구하세요: 6, 12, 18', answer: 12 },
+        { question: '다음 수의 평균을 구하세요: 14, 28, 42', answer: 28 },
+        { question: '다음 수의 평균을 구하세요: 9, 18, 27', answer: 18 },
+        { question: '다음 수의 평균을 구하세요: 7, 14, 21', answer: 14 },
+        { question: '다음 수의 평균을 구하세요: 15, 30, 45', answer: 30 },
+        { question: '다음 수의 평균을 구하세요: 20, 40, 60', answer: 40 },
+        { question: '다음 수의 평균을 구하세요: 25, 50, 75', answer: 50 },
+        { question: '다음 수의 평균을 구하세요: 4, 8, 12, 16', answer: 10 },
+        { question: '다음 수의 평균을 구하세요: 8, 12, 16, 24', answer: 15 },
+        { question: '다음 수의 평균을 구하세요: 6, 12, 18, 24', answer: 15 },
+        { question: '다음 수의 평균을 구하세요: 4, 8, 12, 16, 20', answer: 12 },
+        { question: '다음 수의 평균을 구하세요: 3, 6, 9, 12, 15', answer: 9 },
+        { question: '다음 수의 평균을 구하세요: 12, 24, 36, 48', answer: 30 },
+        { question: '다음 수의 평균을 구하세요: 16, 32, 48, 64', answer: 40 },
+        { question: '다음 수의 평균을 구하세요: 18, 36, 54, 72', answer: 45 },
+        { question: '다음 수의 평균을 구하세요: 14, 28, 42, 56', answer: 35 },
+        { question: '다음 수의 평균을 구하세요: 5, 15, 25, 35, 45', answer: 25 },
+        { question: '다음 수의 평균을 구하세요: 6, 12, 18, 24, 30', answer: 18 },
+        { question: '다음 수의 평균을 구하세요: 7, 14, 21, 28, 35', answer: 21 },
+        { question: '다음 수의 평균을 구하세요: 10, 20, 30, 40, 50', answer: 30 },
+        { question: '다음 수의 평균을 구하세요: 9, 18, 27, 36, 45', answer: 27 },
+        { question: '다음 수의 평균을 구하세요: 11, 22, 33, 44, 55', answer: 33 },
+        { question: '다음 수의 평균을 구하세요: 15, 30, 45, 60, 75', answer: 45 },
+        { question: '다음 수의 평균을 구하세요: 8, 16, 24, 32, 40', answer: 24 },
+        { question: '다음 수의 평균을 구하세요: 12, 24, 36, 48, 60', answer: 36 },
+        { question: '다음 수의 평균을 구하세요: 20, 40, 60, 80, 100', answer: 60 },
+        { question: '다음 수의 평균을 구하세요: 14, 28, 42, 56, 70', answer: 42 },
+        { question: '다음 수의 평균을 구하세요: 16, 32, 48, 64, 80', answer: 48 },
+        { question: '다음 수의 평균을 구하세요: 18, 36, 54, 72, 90', answer: 54 },
+        { question: '다음 수의 평균을 구하세요: 6, 12, 18, 24, 30, 36', answer: 21 },
+        { question: '다음 수의 평균을 구하세요: 10, 20, 30, 40, 50, 60', answer: 35 },
+        { question: '다음 수의 평균을 구하세요: 12, 24, 36, 48, 60, 72', answer: 42 },
+        { question: '다음 수의 평균을 구하세요: 6, 12, 18, 24, 30, 36, 42', answer: 24 },
+        { question: '다음 수의 평균을 구하세요: 4, 8, 12, 16, 20, 24', answer: 14 },
+        { question: '다음 수의 평균을 구하세요: 7, 14, 21, 28, 35, 42, 49', answer: 28 },
+        { question: '다음 수의 평균을 구하세요: 8, 16, 24, 32, 40, 48, 56', answer: 32 },
+        { question: '다음 수의 평균을 구하세요: 9, 18, 27, 36, 45, 54, 63', answer: 36 },
+        { question: '다음 수의 평균을 구하세요: 11, 22, 33, 44, 55, 66, 77', answer: 44 },
+        { question: '다음 수의 평균을 구하세요: 2, 4, 6, 8, 10, 12, 14', answer: 8 },
+        { question: '다음 수의 평균을 구하세요: 3, 6, 9, 12, 15, 18, 21', answer: 12 },
+        { question: '다음 수의 평균을 구하세요: 5, 10, 15, 20, 25, 30, 35', answer: 20 },
+        { question: '다음 수의 평균을 구하세요: 6, 12, 18, 24, 30, 36, 42, 48', answer: 27 },
+        { question: '다음 수의 평균을 구하세요: 4, 8, 12, 16, 20, 24, 28, 32', answer: 18 },
+        { question: '다음 수의 평균을 구하세요: 15, 30, 45, 60, 75, 90, 105', answer: 60 },
+        { question: '다음 수의 평균을 구하세요: 10, 20, 30, 40, 50, 60, 70, 80', answer: 45 },
+        { question: '다음 수의 평균을 구하세요: 1, 2, 3, 4, 5', answer: 3 },
+        { question: '다음 수의 평균을 구하세요: 2, 4, 6, 8, 10', answer: 6 },
+        { question: '다음 수의 평균을 구하세요: 5, 10, 15, 20, 25', answer: 15 }
+    ];
+
+    // 문제를 셔플합니다.
+    let shuffledQuestions = [...questions];
+
+    function startGame(selectedDifficulty) {
+        difficulty = selectedDifficulty;
+        timeLimit = timeLimits[difficulty];
+        document.getElementById('start-screen').classList.remove('active');
+        document.getElementById('game-screen').classList.add('active');
+        currentQuestionIndex = 0;
+        shuffledQuestions = [...questions];
+        shuffleArray(shuffledQuestions);
+        nextQuestion();
+        if (timeLimit !== Infinity) {
+            startEnergyBar();
+        }
+        updateDisplay();
+        gameActive = true;
+    }
+
+    function startEnergyBar() {
+        energyWidth = 100;
+        document.getElementById('energy').style.width = energyWidth + '%';
+        energyDecreaseInterval = setInterval(() => {
+            if (!gameActive) return;
+            energyWidth -= (100 / timeLimit) / 10;
+            document.getElementById('energy').style.width = energyWidth + '%';
+            if (energyWidth <= 0) {
+                clearInterval(energyDecreaseInterval);
+                chances--;
+                if (chances <= 0) {
+                    endGame();
+                } else {
+                    alert('시간 초과! 다음 문제로 넘어갑니다.');
+                    nextQuestion();
+                    energyWidth = 100;
+                    document.getElementById('energy').style.width = energyWidth + '%';
+                }
+            }
+        }, 100);
+    }
+
+    function nextQuestion() {
+        totalTime++;
+        timeLimit *= questionTimeIncrease;
+        if (currentQuestionIndex >= shuffledQuestions.length) {
+            // 모든 문제를 풀면 문제를 다시 섞어서 무작위로 반복합니다.
+            currentQuestionIndex = 0;
+            shuffleArray(shuffledQuestions);
+        }
+        let currentQuestion = shuffledQuestions[currentQuestionIndex];
+        correctAnswer = currentQuestion.answer;
+        document.getElementById('question').innerText = currentQuestion.question;
+        generateOptions();
+        updateDisplay();
+        currentQuestionIndex++;
+    }
+
+    function generateOptions() {
+        let optionsDiv = document.getElementById('options');
+        optionsDiv.innerHTML = '';
+        let correctPosition = Math.floor(Math.random() * 4);
+        let usedAnswers = [correctAnswer];
+        for (let i = 0; i < 4; i++) {
+            let optionButton = document.createElement('button');
+            let optionValue;
+            if (i === correctPosition) {
+                optionValue = correctAnswer;
+            } else {
+                do {
+                    optionValue = Math.floor(Math.random() * 99) + 1; // 1부터 99까지의 자연수
+                } while (usedAnswers.includes(optionValue));
+                usedAnswers.push(optionValue);
+            }
+            optionButton.innerText = optionValue;
+            optionButton.onclick = () => checkAnswer(optionValue);
+            optionsDiv.appendChild(optionButton);
+        }
+    }
+
+    function checkAnswer(selectedAnswer) {
+        if (selectedAnswer === correctAnswer) {
+            score += points[difficulty];
+            alert('정답입니다!');
+        } else {
+            chances--;
+            alert(`오답입니다! 정답은 ${correctAnswer}입니다.`);
+            if (chances <= 0) {
+                endGame();
+                return;
+            }
+        }
+        nextQuestion();
+        if (timeLimit !== Infinity) {
+            clearInterval(energyDecreaseInterval);
+            startEnergyBar();
+        }
+    }
+
+    function updateDisplay() {
+        document.getElementById('score').innerText = `점수: ${score}`;
+        document.getElementById('chances').innerText = `남은 기회: ${chances}`;
+        document.getElementById('total-time').innerText = `총 게임 시간: ${totalTime}초`;
+    }
+
+    function endGame() {
+        gameActive = false;
+        clearInterval(energyDecreaseInterval);
+        document.getElementById('game-screen').classList.remove('active');
+        document.getElementById('end-screen').classList.add('active');
+        document.getElementById('final-score').innerText = `최종 점수: ${score}`;
+    }
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            let j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+</script>
+
+</body>
+</html>
